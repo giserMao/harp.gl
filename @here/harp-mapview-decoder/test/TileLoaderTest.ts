@@ -119,8 +119,7 @@ describe("TileLoader", function() {
                 dataSource,
                 tileKey,
                 dataProvider,
-                new MockTileDecoder(),
-                0
+                new MockTileDecoder()
             );
 
             const loadPromise = tileLoader.loadAndDecode();
@@ -134,8 +133,7 @@ describe("TileLoader", function() {
                 dataSource,
                 tileKey,
                 dataProvider,
-                new MockTileDecoder(),
-                0
+                new MockTileDecoder()
             );
 
             const loadPromise = tileLoader.loadAndDecode();
@@ -151,7 +149,7 @@ describe("TileLoader", function() {
         it("should handle empty payloads", function() {
             const tileDecoder = new MockTileDecoder();
             const decodeTileSpy = sinon.spy(tileDecoder, "decodeTile");
-            const tileLoader = new TileLoader(dataSource, tileKey, dataProvider, tileDecoder, 0);
+            const tileLoader = new TileLoader(dataSource, tileKey, dataProvider, tileDecoder);
 
             const getTileStub = sinon.stub(dataProvider, "getTile").resolves(new ArrayBuffer(0));
             let loadPromise = tileLoader.loadAndDecode();
@@ -179,8 +177,7 @@ describe("TileLoader", function() {
                     dataSource,
                     tileKey,
                     dataProvider,
-                    new MockTileDecoder(),
-                    0
+                    new MockTileDecoder()
                 );
                 LoggerManager.instance.update("TileLoader", { enabled: false });
             });
@@ -218,8 +215,7 @@ describe("TileLoader", function() {
                 dataSource,
                 tileKey,
                 dataProvider,
-                new MockTileDecoder(),
-                0
+                new MockTileDecoder()
             );
 
             const loadPromise = tileLoader.loadAndDecode();
@@ -236,14 +232,13 @@ describe("TileLoader", function() {
                 dataSource,
                 tileKey,
                 dataProvider,
-                new MockTileDecoder(),
-                0
+                new MockTileDecoder()
             );
             const loadPromise = tileLoader.loadAndDecode();
             expect(loadPromise).to.not.be.undefined;
 
             // mock loaded data state
-            tileLoader.payload = new ArrayBuffer(5);
+            (tileLoader as any).payload = new ArrayBuffer(5);
             tileLoader.state = TileLoaderState.Loaded;
             (tileLoader as any).startDecodeTile();
 
