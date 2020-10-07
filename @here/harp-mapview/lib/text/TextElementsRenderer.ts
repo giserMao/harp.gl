@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { LineMarkerTechnique, Theme } from "@here/harp-datasource-protocol";
-import { TileKey } from "@here/harp-geoutils";
+import { TileKey, Vector3Like } from "@here/harp-geoutils";
 import {
     AdditionParameters,
     DEFAULT_TEXT_CANVAS_LAYER,
@@ -121,6 +121,13 @@ const OVERLOAD_UPDATE_TIME_LIMIT = 5;
  * moving, it is ignored. See [[TextElementsRenderer.isDynamicFrame]].
  */
 const OVERLOAD_PLACE_TIME_LIMIT = 10;
+
+// Allowed number of pixels outside the screen to test for placement.
+// A value of 0 will lead to labels popping in at the border of the screen. A large value will
+// lead to many labels being placed outside the screen, with all the required actions for measuring
+// and loading glyphs.
+const MAX_HORIZONTAL_DISTANCE_TO_BORDER = 100;
+const MAX_VERTICAL_DISTANCE_TO_BORDER = 40;
 
 const logger = LoggerManager.instance.create("TextElementsRenderer", { level: LogLevel.Log });
 
@@ -330,6 +337,7 @@ export class TextElementsRenderer {
 
     private readonly m_textElementStateCache: TextElementStateCache = new TextElementStateCache();
 
+    private m_pixelToNDC = 1;
     /**
      * Create the `TextElementsRenderer` which selects which labels should be placed on screen as
      * a preprocessing step, which is not done every frame, and also renders the placed
@@ -426,6 +434,9 @@ export class TextElementsRenderer {
         }
 
         this.updateGlyphDebugMesh();
+
+        const { width } = this.m_poiManager.mapView.getCanvasClientSize();
+        this.m_pixelToNDC = 2 / width;
 
         for (const textRenderer of this.m_textRenderers) {
             textRenderer.textCanvas.render(camera);
@@ -1616,7 +1627,7 @@ export class TextElementsRenderer {
             this.m_viewState.lookAtDistance
         );
         const iconReady = renderIcon && poiRenderer.prepareRender(pointLabel, this.m_viewState.env);
-
+        let iconInvisible = false;
         if (iconReady) {
             const result = placeIcon(
                 iconRenderState,
@@ -1627,17 +1638,19 @@ export class TextElementsRenderer {
                 this.m_screenCollisions
             );
             if (result === PlacementResult.Invisible) {
+                // Reset the icon and keep it from popping up before fading in.
+                iconInvisible = true;
                 iconRenderState.reset();
-
-                if (placementStats) {
+                iconRenderState.opacity = 0;
+                if (placementStats !== undefined) {
                     ++placementStats.numNotVisible;
                 }
-                return false;
+                // Proceed with the label text, which may still be rendered.
             }
             iconRejected = result === PlacementResult.Rejected;
         } else if (renderIcon && poiInfo!.isValid !== false) {
             // Ensure that text elements still loading icons get a chance to be rendered if
-            // there's no text element updates in the next frames.
+            // there are no text element updates in the next frames.
             this.m_forceNewLabelsPass = true;
         }
 
@@ -1665,22 +1678,27 @@ export class TextElementsRenderer {
                 iconIndex === undefined
             );
             if (placeResult === PlacementResult.Invisible) {
-                if (placementStats) {
+                if (placementStats !== undefined) {
                     placementStats.numPoiTextsInvisible++;
                 }
-                labelState.reset();
-                return false;
+                if (!renderIcon || iconInvisible) {
+                    labelState.reset();
+                    return false;
+                }
             }
 
             const textRejected = placeResult === PlacementResult.Rejected;
-            if (!iconRejected) {
+            if (!iconRejected && !iconInvisible) {
                 const textIsOptional: boolean =
                     pointLabel.poiInfo !== undefined && pointLabel.poiInfo.textIsOptional === true;
                 iconRejected = textRejected && !textIsOptional;
             }
 
             if (textRejected) {
-                textRenderState!.startFadeOut(renderParams.time);
+                if (textRenderState!.isReallyVisible()) {
+                    textRenderState!.startFadeOut(renderParams.time);
+                }
+                iconRejected = true;
             }
 
             const textNeedsDraw =
@@ -1709,8 +1727,14 @@ export class TextElementsRenderer {
         }
         // ... and render the icon (if any).
         if (iconReady) {
-            if (iconRejected) {
-                iconRenderState!.startFadeOut(renderParams.time);
+            if (iconRejected || iconInvisible) {
+                if (iconRenderState.isReallyVisible()) {
+                    iconRenderState.startFadeOut(renderParams.time);
+                } else if (!iconRenderState.isFadingOut()) {
+                    // Reset the icon and keep it from popping up before fading in.
+                    iconRenderState.reset();
+                    iconRenderState.opacity = 0;
+                }
             } else {
                 iconRenderState!.startFadeIn(renderParams.time, this.m_options.disableFading);
             }
@@ -1756,10 +1780,9 @@ export class TextElementsRenderer {
             this.m_viewState.env,
             this.m_tmpVector3
         );
-        // Only process labels frustum-clipped labels
-        if (
-            this.m_screenProjector.projectOnScreen(worldPosition, tempScreenPosition) === undefined
-        ) {
+
+        // Only process labels that are potentially within the frustum.
+        if (!this.labelPotentiallyVisible(worldPosition, tempScreenPosition)) {
             return false;
         }
         // Add this POI as a point label.
@@ -1812,10 +1835,9 @@ export class TextElementsRenderer {
         if (minDistanceSqr > 0 && shieldGroup !== undefined) {
             for (let pointIndex = 0; pointIndex < path.length; ++pointIndex) {
                 const point = path[pointIndex];
-                // Only process labels frustum-clipped labels
-                if (
-                    this.m_screenProjector.projectOnScreen(point, tempScreenPosition) !== undefined
-                ) {
+
+                // Only process potentially visible labels
+                if (this.labelPotentiallyVisible(point, tempScreenPosition)) {
                     // Find a suitable location for the lineMarker to be placed at.
                     let tooClose = false;
                     for (let j = 0; j < shieldGroup.length; j += 2) {
@@ -1855,10 +1877,8 @@ export class TextElementsRenderer {
         else {
             for (let pointIndex = 0; pointIndex < path.length; ++pointIndex) {
                 const point = path[pointIndex];
-                // Only process labels frustum-clipped labels
-                if (
-                    this.m_screenProjector.projectOnScreen(point, tempScreenPosition) !== undefined
-                ) {
+                // Only process potentially visible labels
+                if (this.labelPotentiallyVisible(point, tempScreenPosition)) {
                     this.addPointLabel(
                         labelState,
                         point,
@@ -2017,5 +2037,21 @@ export class TextElementsRenderer {
         }
         this.m_overloaded = newOverloaded;
         return this.m_overloaded;
+    }
+
+    /**
+     * Project point to screen and check if it is on screen or within a fixed distance to the border.
+     *
+     * @param point center point of label.
+     * @param outPoint projected screen point of label.
+     */
+    private labelPotentiallyVisible(point: Vector3Like, outPoint: THREE.Vector2): boolean {
+        const projectionResult = this.m_screenProjector.projectAreaToScreen(
+            point,
+            MAX_HORIZONTAL_DISTANCE_TO_BORDER * 2 * this.m_pixelToNDC,
+            MAX_VERTICAL_DISTANCE_TO_BORDER * 2 * this.m_pixelToNDC,
+            outPoint
+        );
+        return projectionResult !== undefined;
     }
 }

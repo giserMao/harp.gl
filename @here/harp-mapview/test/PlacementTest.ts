@@ -1059,10 +1059,9 @@ describe("Placement", function() {
                     expect(inPositions[i].x).to.equal(outPositions[i].x + marginX);
                     expect(inPositions[i].y).to.equal(outPositions[i].y - marginY);
                 }
-                // First element allocated, second collides, because it's a new label
-                // it retrieves PlacementResult.Invisible status.
+                // First element allocated, second collides.
                 expect(results[0]).to.equal(PlacementResult.Ok);
-                expect(results[1]).to.equal(PlacementResult.Invisible);
+                expect(results[1]).to.equal(PlacementResult.Rejected);
 
                 // Cleanup screen for next frame
                 screenCollisions.reset();
@@ -1146,9 +1145,8 @@ describe("Placement", function() {
                 }
                 // First element allocated, second collides, without alternative placement,
                 // centered labels are not handled with multi-anchor placement.
-                // Because it's a new label it retrieves PlacementResult.Invisible status.
                 expect(results[0]).to.equal(PlacementResult.Ok);
-                expect(results[1]).to.equal(PlacementResult.Invisible);
+                expect(results[1]).to.equal(PlacementResult.Rejected);
             });
 
             it("place two approaching texts", async function() {

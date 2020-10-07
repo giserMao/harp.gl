@@ -2778,6 +2778,30 @@ export class MapView extends EventDispatcher {
     }
 
     /**
+     * Get canvas client size in css/client pixels.
+     *
+     * Supports canvases not attached to DOM, which have 0 as `clientWidth` and `clientHeight` by
+     * calculating it from actual canvas size and current pixel ratio.
+     */
+    getCanvasClientSize(): { width: number; height: number } {
+        const { clientWidth, clientHeight } = this.canvas;
+        if (
+            clientWidth === 0 ||
+            clientHeight === 0 ||
+            typeof clientWidth !== "number" ||
+            typeof clientHeight !== "number"
+        ) {
+            const pixelRatio = this.m_renderer.getPixelRatio();
+            return {
+                width: Math.round(this.canvas.width / pixelRatio),
+                height: Math.round(this.canvas.height / pixelRatio)
+            };
+        } else {
+            return { width: clientWidth, height: clientHeight };
+        }
+    }
+
+    /**
      * Do a raycast on all objects in the scene. Useful for picking.
      *
      * @remarks
@@ -4531,29 +4555,5 @@ export class MapView extends EventDispatcher {
             THREE.MathUtils.degToRad(this.m_options.fovCalculation!.fov),
             height
         );
-    }
-
-    /**
-     * Get canvas client size in css/client pixels.
-     *
-     * Supports canvases not attached to DOM, which have 0 as `clientWidth` and `clientHeight` by
-     * calculating it from actual canvas size and current pixel ratio.
-     */
-    private getCanvasClientSize(): { width: number; height: number } {
-        const { clientWidth, clientHeight } = this.canvas;
-        if (
-            clientWidth === 0 ||
-            clientHeight === 0 ||
-            typeof clientWidth !== "number" ||
-            typeof clientHeight !== "number"
-        ) {
-            const pixelRatio = this.m_renderer.getPixelRatio();
-            return {
-                width: Math.round(this.canvas.width / pixelRatio),
-                height: Math.round(this.canvas.height / pixelRatio)
-            };
-        } else {
-            return { width: clientWidth, height: clientHeight };
-        }
     }
 }

@@ -120,6 +120,18 @@ export class RenderState {
     }
 
     /**
+     * @returns `true` if state is neither faded out nor undefined and the opacity is larger
+     * than 0.
+     */
+    isReallyVisible(): boolean {
+        return (
+            this.m_state !== FadingState.FadedOut &&
+            this.m_state !== FadingState.Undefined &&
+            this.opacity > 0
+        );
+    }
+
+    /**
      * Updates the state to [[FadingState.FadingIn]].
      * If previous state is [[FadingState.FadingIn]] or [[FadingState.FadedIn]] it remains
      * unchanged.

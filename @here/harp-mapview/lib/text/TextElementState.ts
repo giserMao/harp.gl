@@ -81,6 +81,32 @@ export class TextElementState {
     }
 
     /**
+     * @returns `true` if any component of the element is really visible, `false` otherwise.
+     */
+    get reallyVisible(): boolean {
+        if (this.m_textRenderState !== undefined && this.m_textRenderState.isReallyVisible()) {
+            return true;
+        }
+
+        const iconRenderState = this.iconRenderState;
+        if (iconRenderState !== undefined && iconRenderState.isReallyVisible()) {
+            return true;
+        }
+
+        const iconRenderStates = this.iconRenderStates;
+        if (iconRenderStates === undefined) {
+            return false;
+        }
+
+        for (const state of iconRenderStates) {
+            if (state.isReallyVisible()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Return the last text placement used.
      *
      * If the text wasn't yet rendered or have no alternative placements it will fallback to
